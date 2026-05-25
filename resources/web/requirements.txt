@@ -21,3 +21,6 @@ findspark
 iso8601
 urllib3==1.24
 joblib
+flask_socketio
+cassandra-driver
+python-socketio

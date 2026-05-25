@@ -1,7 +1,22 @@
 import sys, os, re
+import json
+import uuid
+import time
+import uuid
+import json
+import logging
+# Date/time stuff
+import iso8601
+import datetime
+import threading
 from flask import Flask, render_template, request
 from pymongo import MongoClient
 from bson import json_util
+from flask_socketio import SocketIO, join_room, leave_room
+from kafka import KafkaProducer, KafkaConsumer
+# Load our regression model
+import joblib
+from os import environ
 
 # Configuration details
 import config
@@ -11,28 +26,35 @@ import predict_utils
 
 # Set up Flask, Mongo and Elasticsearch
 app = Flask(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
+)
+
+logger = logging.getLogger(__name__)
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode="threading"
+)
 
 client = MongoClient()
 
 from pyelasticsearch import ElasticSearch
 elastic = ElasticSearch(config.ELASTIC_URL)
 
-import json
-import os
 
-# Date/time stuff
-import iso8601
-import datetime
 
 # Setup Kafka
-from kafka import KafkaProducer
-producer = KafkaProducer(
-    bootstrap_servers=[os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")],
-    api_version=(0, 10)
-)
-PREDICTION_TOPIC = 'flight-delay-ml-request'
+KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
+REQUEST_TOPIC = "flight-delay-ml-request"
+RESPONSE_TOPIC = "flight-delay-ml-response"
 
-import uuid
+producer = KafkaProducer(
+    bootstrap_servers=[KAFKA_BOOTSTRAP_SERVERS],
+    value_serializer=lambda value: json.dumps(value).encode("utf-8")
+)
+
 
 # Chapter 5 controller: Fetch a flight and display it
 @app.route("/on_time_performance")
@@ -295,9 +317,6 @@ def search_flights():
 def delays():
   return render_template('delays.html')
 
-# Load our regression model
-import joblib
-from os import environ
 
 
 project_home = os.environ["PROJECT_HOME"]
@@ -474,7 +493,7 @@ def classify_flight_delays_realtime():
     prediction_features[key] = value
   
   # Set the derived values
-  prediction_features['Distance'] = predict_utils.get_flight_distance(
+  prediction_features['Distance'] = predict_utils.get_flight_distance_cassandra(
     client, api_form_values['Origin'],
     api_form_values['Dest']
   )
@@ -491,13 +510,26 @@ def classify_flight_delays_realtime():
   
   # Create a unique ID for this message
   unique_id = str(uuid.uuid4())
-  prediction_features['UUID'] = unique_id
-  
-  message_bytes = json.dumps(prediction_features).encode()
-  producer.send(PREDICTION_TOPIC, message_bytes)
+  prediction_features["UUID"] = unique_id
 
-  response = {"status": "OK", "id": unique_id}
-  return json_util.dumps(response)
+  producer.send(REQUEST_TOPIC, prediction_features)
+  producer.flush()
+
+  logger.info("========== NUEVA PREDICCION ==========")
+  logger.info(f"UUID: {unique_id}")
+  logger.info(f"Payload: {prediction_features}")
+  logger.info(f"Mensaje enviado a Kafka topic {REQUEST_TOPIC}")
+
+  producer.send(REQUEST_TOPIC, prediction_features)
+  producer.flush()
+  logger.info("[KAFKA PRODUCER] Mensaje enviado correctamente")
+
+  response = {
+      "status": "OK",
+      "id": unique_id
+  }
+
+  return json.dumps(response)
 
 @app.route("/flights/delays/predict_kafka")
 def flight_delays_page_kafka():
@@ -541,9 +573,98 @@ def shutdown():
   shutdown_server()
   return 'Server shutting down...'
 
+@socketio.on('register')
+def handle_register(data):
+    uuid = data['uuid']
+    join_room(uuid)
+    print("\n========== SOCKET REGISTER ==========")
+    print(f"[SOCKET ID] {request.sid}")
+    print(f"[ROOM UUID] {uuid}")
+    print("[WEBSOCKET] Cliente unido correctamente")
+    print("=====================================\n")
+
+@app.route("/kafka/send-test")
+def kafka_send_test():
+    message = {
+        "UUID": str(uuid.uuid4()),
+        "Origin": "MAD",
+        "Dest": "JFK",
+        "Carrier": "AA",
+        "FlightDate": "2016-12-25",
+        "DepDelay": 5.0,
+        "source": "flask-web",
+        "timestamp": time.time()
+    }
+
+    producer.send(REQUEST_TOPIC, message)
+    producer.flush()
+
+    print("Mensaje enviado a Kafka:")
+    logger.info("========== KAFKA RESPONSE ==========")
+    logger.info(f"Mensaje recibido: {message}")
+    logger.info(f"Room destino: {uuid}")
+
+    return json.dumps({
+        "status": "OK",
+        "sent_to": REQUEST_TOPIC,
+        "message": message
+    })
+
+def listen_kafka_response_topic():
+    while True:
+        try:
+            consumer = KafkaConsumer(
+                RESPONSE_TOPIC,
+                bootstrap_servers=[KAFKA_BOOTSTRAP_SERVERS],
+                group_id="flask-websocket-consumer",
+                auto_offset_reset="latest",
+                enable_auto_commit=True,
+                value_deserializer=lambda value: json.loads(value.decode("utf-8"))
+            )
+
+            print(f"Escuchando respuestas en Kafka topic: {RESPONSE_TOPIC}")
+
+            for record in consumer:
+                message = record.value
+                uuid = message.get("UUID")
+                print("\n========== KAFKA RESPONSE ==========")
+
+                print(f"[KAFKA CONSUMER] Topic: {RESPONSE_TOPIC}")
+
+                print("[PAYLOAD]")
+                print(json.dumps(message, indent=2))
+
+                print(f"[TARGET ROOM] {uuid}")
+
+                print("[WEBSOCKET] Emitiendo respuesta al cliente correcto")
+
+                socketio.emit(
+                    "kafka_response",
+                    message,
+                    room=uuid
+                )
+
+                print("[WEBSOCKET] Evento emitido correctamente")
+
+                print("====================================\n")
+
+        except Exception as e:
+            print("\n========== ERROR KAFKA ==========")
+            print(f"[ERROR] {str(e)}")
+            print("[ACTION] Reintentando en 5 segundos...")
+            print("=================================\n")
+            time.sleep(5)
+
 if __name__ == "__main__":
-    app.run(
-    debug=True,
-    host='0.0.0.0',
-    port='5001'
-  )
+  kafka_thread = threading.Thread(target=listen_kafka_response_topic)
+  kafka_thread.daemon = True
+  kafka_thread.start()
+
+  socketio.run(
+        app,
+        host="0.0.0.0",
+        port=5001,
+        debug=True,
+        use_reloader=False,
+        allow_unsafe_werkzeug=True
+    )

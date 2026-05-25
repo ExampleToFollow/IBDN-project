@@ -1,6 +1,29 @@
 import sys, os, re
 import pymongo
 import datetime, iso8601
+from cassandra.cluster import Cluster
+
+
+def get_flight_distance_cassandra(client ,origin, dest):
+  cluster = Cluster(["cassandra"], port=9042)
+  session = cluster.connect("agile_data_science")
+
+  query = """
+    SELECT distance
+    FROM flight_distances
+    WHERE origin = %s AND dest = %s
+    LIMIT 1
+  """
+
+  row = session.execute(query, (origin, dest)).one()
+
+  cluster.shutdown()
+
+  if row is None:
+    raise Exception("No se encontró distancia para {} -> {}".format(origin, dest))
+
+  return row.distance
+
 
 def process_search(results):
   """Process elasticsearch hits and return flights records"""

@@ -1,6 +1,6 @@
 services:
   kafka:
-    image: apache/kafka:4.0.0
+    image: apache/kafka:4.2.0
     container_name: kafka
     ports:
       - "9092:9092"
@@ -15,8 +15,9 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      
   kafka-init:
-    image: apache/kafka:4.0.0
+    image: apache/kafka:4.2.0
     container_name: kafka-init
     depends_on:
       - kafka
@@ -30,13 +31,14 @@ services:
 
       echo 'Creando topics...';
 
-      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic mi-topic-1 --partitions 1  --replication-factor 1;
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic flight-delay-ml-request --partitions 1  --replication-factor 1;
 
-      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic mi-topic-2 --partitions 1 --replication-factor 1;
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic flight-delay-ml-response --partitions 1 --replication-factor 1;
 
       echo 'Topics creados:';
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list;
       "
+
   cassandra:
     image: cassandra:4.1
     container_name: cassandra
@@ -49,6 +51,7 @@ services:
       CASSANDRA_ENDPOINT_SNITCH: "GossipingPropertyFileSnitch"
     volumes:
       - cassandra_data:/var/lib/cassandra
+  
   cassandra-init:
     image: python:3.8-slim
     container_name: cassandra-init
@@ -73,6 +76,7 @@ services:
       echo 'Cargando datos en Cassandra...';
       python /app/import_distances_cassandra.py;
       "
+
   minio:
     image: minio/minio:latest
     container_name: minio
@@ -115,6 +119,7 @@ services:
       echo 'Contenido de raw:';
       mc ls local/raw;
       "
+
   flask-web:
     build:
       context: .
@@ -127,10 +132,19 @@ services:
       PREDICTION_TOPIC: flight-delay-ml-request
       PROJECT_HOME: /app
     volumes:
-      - /home/IBDN-project/resources/web:/app/resources/web
+      - ./resources/web:/app/resources/web
+      - ./templates:/app/templates
+      - ./static:/app/static
+      - ./predict_flask_websocket.py:/app/predict_flask_websocket.py
+      - ./kafka_consumer_websocket.py:/app/kafka_consumer_websocket.py
+      - ./config.py:/app/config.py
+      - ./predict_utils.py:/app/predict_utils.py
     depends_on:
       - kafka
-    command: python /app/resources/web/predict_flask.py
+      - kafka-init
+      - cassandra
+      - cassandra-init
+    restart: unless-stopped
 
 volumes:  
   cassandra_data:

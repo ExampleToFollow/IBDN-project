@@ -26,9 +26,11 @@
   </form>
 
   <div style="margin-top: 10px;">
-      <p>Delay: <span id="result" style="display: inline-block;"></span></p>
+      <p>Status: <span id="status">Waiting</span></p>
+      <p>Delay: <span id="result"></span></p>
   </div>
 
   <!-- Load our form processing javascript -->
-  <script src="/static/flight_delay_predict_polling.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="/static/flight_delay_predict_websocket.js"></script>
 {% endblock %}

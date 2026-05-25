@@ -10,4 +10,4 @@ COPY resources/web /app/resources/web
 
 EXPOSE 5001
 
-CMD ["python", "/app/resources/web/predict_flask.py"]
+CMD ["python", "/app/resources/web/predict_flask_project.py"]
