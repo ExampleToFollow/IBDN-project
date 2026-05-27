@@ -5,7 +5,8 @@ import org.apache.spark.ml.feature.{Bucketizer, StringIndexerModel, VectorAssemb
 import org.apache.spark.sql.functions.{concat, from_json, lit}
 import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql.{DataFrame, SparkSession}
-
+import com.datastax.oss.driver.api.core.CqlSession
+import java.net.InetSocketAddress
 object MakePrediction {
 
   def main(args: Array[String]): Unit = {
@@ -29,6 +30,9 @@ object MakePrediction {
         .config("spark.hadoop.fs.s3a.path.style.access", "true")
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
+
+        .config("spark.cassandra.connection.host", "cassandra")
+        .config("spark.cassandra.connection.port", "9042")
 
         .getOrCreate()
 
@@ -179,7 +183,50 @@ object MakePrediction {
       .option("checkpointLocation", "/tmp/checkpoints/flight_prediction_kafka")
       .outputMode("append")
       .start()
-      kafkaQuery.awaitTermination()
+
+   val cassandraQuery = finalPredictions
+      .writeStream
+      .outputMode("append")
+      .option("checkpointLocation", "/tmp/checkpoints/flight_prediction_cassandra")
+      .foreachBatch { (batchDF: DataFrame, batchId: Long) =>
+          batchDF.foreachPartition { (rows: Iterator[org.apache.spark.sql.Row]) =>
+          // Una sesión por partición (se reutiliza gracias al pool interno del driver)
+          val session = CqlSession.builder()
+            .addContactPoint(new InetSocketAddress("cassandra", 9042))
+            .withLocalDatacenter("datacenter1")
+            .build()
+
+          val stmt = session.prepare(
+            """INSERT INTO agile_data_science.flight_delay_predictions
+              |(uuid, origin, dest, carrier, flight_date, day_of_week,
+              | day_of_month, day_of_year, dep_delay, distance, route, prediction)
+              |VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""".stripMargin
+          )
+
+          rows.foreach { row =>
+            session.execute(stmt.bind(
+              row.getAs[String]("UUID"),
+              row.getAs[String]("Origin"),
+              row.getAs[String]("Dest"),
+              row.getAs[String]("Carrier"),
+              row.getAs[java.sql.Date]("FlightDate").toLocalDate,
+              row.getAs[Int]("DayOfWeek").asInstanceOf[java.lang.Integer],
+              row.getAs[Int]("DayOfMonth").asInstanceOf[java.lang.Integer],
+              row.getAs[Int]("DayOfYear").asInstanceOf[java.lang.Integer],
+              row.getAs[Double]("DepDelay").asInstanceOf[java.lang.Double],
+              row.getAs[Double]("Distance").asInstanceOf[java.lang.Double],
+              row.getAs[String]("Route"),
+              row.getAs[Double]("Prediction").toString
+            ))
+          }
+          session.close()
+        }
+      }
+      .start()
+
+    // CAMBIAR el awaitTermination para esperar ambos
+    kafkaQuery.awaitTermination()
+    cassandraQuery.awaitTermination()
     
     /* val consoleOutput = finalPredictions.writeStream
       .outputMode("append")

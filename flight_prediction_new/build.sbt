@@ -16,7 +16,7 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-hive" % sparkVersion % "provided",
   "org.apache.spark" %% "spark-sql-kafka-0-10" % sparkVersion,
   "org.mongodb.spark" %% "mongo-spark-connector" % "10.4.1",
-
+"com.datastax.oss" % "java-driver-core" % "4.17.0",
   "org.apache.hadoop" % "hadoop-aws" % "3.4.1",
   "org.apache.iceberg" %% "iceberg-spark-runtime-4.0" % "1.10.0"
 )

@@ -21,10 +21,19 @@ CREATE TABLE IF NOT EXISTS flight_distances (
 
 session.execute("""
 CREATE TABLE IF NOT EXISTS flight_delay_predictions (
-    uuid text PRIMARY KEY, origin text, dest text, carrier text,
-    flight_num text, flight_date text, dep_delay double,
-    distance double, prediction double, timestamp text
-)""")
+    uuid text PRIMARY KEY,
+    origin text,
+    dest text,
+    carrier text,
+    flight_date date,
+    day_of_week int,
+    day_of_month int,
+    day_of_year int,
+    dep_delay double,
+    distance double,
+    route text,
+    prediction text
+    )""")
 
 stmt = session.prepare("INSERT INTO flight_distances (origin, dest, distance) VALUES (?, ?, ?)")
 count = 0
