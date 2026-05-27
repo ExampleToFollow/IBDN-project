@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ibdn
+
+resources:
+  # Base
+  - base/namespace.yaml
+  - base/configmaps.yaml
+  - base/secrets.yaml
+
+  # Infraestructura
+  - infra/minio.yaml
+  - infra/cassandra.yaml
+  - infra/kafka.yaml
+  - infra/init-jobs.yaml
+
+  # Spark
+  - spark/spark-master.yaml
+  - spark/spark-worker.yaml
+  - spark/spark-train-job.yaml
+  #- spark/spark-predictor.yaml
+
+  # Aplicación
+  - app/flask-web.yaml

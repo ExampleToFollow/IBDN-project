@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spark-train-job
+  namespace: ibdn
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-all
+        image: busybox:1.28
+        command: ['sh', '-c', "until nc -z spark-master 7077 && nc -z kafka 9092 && nc -z cassandra 9042; do echo ola; sleep 5; done"]
+      containers:
+        - name: spark-train
+          image: hineill/ibdn-spark-train:latest
+          envFrom:
+            - configMapRef:
+                name: ibdn-config
+            - secretRef:
+                name: ibdn-secrets
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Waiting for Spark cluster and MinIO..."
+              sleep 15
+              /opt/spark/bin/spark-submit \
+                --master spark://spark-master:7077 \
+                --packages org.apache.hadoop:hadoop-aws:3.4.1 \
+                /app/train_spark_mllib_model.py
+      restartPolicy: OnFailure

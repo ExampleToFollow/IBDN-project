@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-worker
+  template:
+    metadata:
+      labels:
+        app: spark-worker
+    spec:
+      initContainers:
+        - name: wait-for-master
+          image: busybox:1.28
+          command: ['sh', '-c', "until nc -z spark-master 7077; do echo waiting for spark-master; sleep 2; done"]
+      containers:
+        - name: spark-worker
+          image: apache/spark:4.1.1
+          securityContext:
+            runAsUser: 0
+          command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+          env:
+            - name: SPARK_MODE
+              value: "worker"

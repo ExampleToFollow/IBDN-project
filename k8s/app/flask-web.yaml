@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-web
+  namespace: ibdn
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask-web
+  template:
+    metadata:
+      labels:
+        app: flask-web
+    spec:
+      initContainers:
+        - name: wait-for-all
+          image: busybox:1.28
+          command: ['sh', '-c', "until nc -z kafka 9092 && nc -z cassandra 9042; do echo waiting for dbs; sleep 2; done"]
+      containers:
+        - name: flask-web
+          image: hineill/ibdn-flask-web:latest
+          ports:
+            - containerPort: 5001
+          envFrom:
+            - configMapRef:
+                name: ibdn-config
+            - secretRef:
+                name: ibdn-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-web
+  namespace: ibdn
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 5001
+      targetPort: 5001
+  selector:
+    app: flask-web
