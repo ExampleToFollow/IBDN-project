@@ -14,14 +14,10 @@ def get_flight_distance_cassandra(client ,origin, dest):
     WHERE origin = %s AND dest = %s
     LIMIT 1
   """
-
   row = session.execute(query, (origin, dest)).one()
-
   cluster.shutdown()
-
   if row is None:
     raise Exception("No se encontró distancia para {} -> {}".format(origin, dest))
-
   return row.distance
 
 

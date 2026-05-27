@@ -1,0 +1,3 @@
+FROM apache/spark:4.1.1-scala2.13-java21-python3-r-ubuntu
+USER root
+COPY flight_prediction_new/target/scala-2.13/flight_prediction_2.13-0.1.jar /app/spark-kafka-predictor.jar

@@ -15,115 +15,84 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      
-  kafka-init:
-    image: apache/kafka:4.2.0
-    container_name: kafka-init
-    depends_on:
-      - kafka
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      "
-      echo 'Esperando a Kafka...';
-      until /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list; do
-        sleep 2;
-      done;
-
-      echo 'Creando topics...';
-
-      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic flight-delay-ml-request --partitions 1  --replication-factor 1;
-
-      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic flight-delay-ml-response --partitions 1 --replication-factor 1;
-
-      echo 'Topics creados:';
-      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list;
-      "
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
 
   cassandra:
     image: cassandra:4.1
     container_name: cassandra
+    environment:
+      CASSANDRA_CLUSTER_NAME: flight-cluster
     ports:
       - "9042:9042"
-    environment:
-      CASSANDRA_CLUSTER_NAME: "flight-cluster"
-      CASSANDRA_DC: "datacenter1"
-      CASSANDRA_RACK: "rack1"
-      CASSANDRA_ENDPOINT_SNITCH: "GossipingPropertyFileSnitch"
     volumes:
       - cassandra_data:/var/lib/cassandra
-  
-  cassandra-init:
-    image: python:3.8-slim
-    container_name: cassandra-init
-    depends_on:
-      - cassandra
-    volumes:
-      - ./data:/data
-      - ./resources/cassandra:/app
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      "
-      echo 'Instalando cassandra-driver...';
-      pip install cassandra-driver;
-
-      echo 'Esperando a Cassandra...';
-
-      until python -c \"from cassandra.cluster import Cluster; cluster = Cluster(['cassandra'], port=9042); session = cluster.connect(); print('Cassandra lista'); cluster.shutdown()\"; do
-        echo 'Cassandra aún no está lista, esperando 10s...';
-        sleep 10;
-      done;
-
-      echo 'Cargando datos en Cassandra...';
-      python /app/import_distances_cassandra.py;
-      "
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'SHOW VERSION' localhost 9042 || exit 1"]      
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
 
   minio:
     image: minio/minio:latest
     container_name: minio
     ports:
-      - "9000:9000"   # API S3
-      - "9001:9001"   # consola web
+      - "9000:9000"
+      - "9001:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-  minio-init:
-    image: minio/mc:latest
-    container_name: minio-init
+  kafka-init:
+    image: apache/kafka:4.2.0
+    container_name: kafka-init
     depends_on:
-      - minio
-    volumes:
-      - ./data:/data
+      kafka:
+        condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
     command: >
-      "
-      echo 'Esperando a MinIO...';
+      echo "=== [KAFKA-INIT] Creando tópicos ===";
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic flight-delay-ml-request --partitions 1 --replication-factor 1;
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic flight-delay-ml-response --partitions 1 --replication-factor 1;
+      echo "=== [KAFKA-INIT] Tópicos creados ===";
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list;
 
-      until mc alias set local http://minio:9000 minioadmin minioadmin; do
-        sleep 2;
-      done;
+  cassandra-init:
+    build:
+      context: .
+      dockerfile: docker/cassandra-init/Dockerfile
+    container_name: cassandra-init
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    command: python /app/init.py
 
-      echo 'Creando buckets...';
-
-      mc mb --ignore-existing local/warehouse;
-      mc mb --ignore-existing local/raw;
-      mc mb --ignore-existing local/checkpoints;
-
-      echo 'Subiendo dataset histórico a MinIO...';
-
-      mc cp /data/simple_flight_delay_features.jsonl.bz2 local/raw/;
-
-      echo 'Contenido de raw:';
-      mc ls local/raw;
-      "
+  minio-init:
+    build:
+      context: .
+      dockerfile: docker/minio-init/Dockerfile
+    container_name: minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
 
   flask-web:
     build:
       context: .
-      dockerfile: docker/flask/Dockerfile
+      dockerfile: docker/flask-web/Dockerfile
     container_name: flask-web
     ports:
       - "5001:5001"
@@ -133,19 +102,121 @@ services:
       PROJECT_HOME: /app
     volumes:
       - ./resources/web:/app/resources/web
-      - ./templates:/app/templates
-      - ./static:/app/static
-      - ./predict_flask_websocket.py:/app/predict_flask_websocket.py
-      - ./kafka_consumer_websocket.py:/app/kafka_consumer_websocket.py
-      - ./config.py:/app/config.py
-      - ./predict_utils.py:/app/predict_utils.py
-    depends_on:
-      - kafka
-      - kafka-init
-      - cassandra
-      - cassandra-init
     restart: unless-stopped
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      cassandra-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
 
-volumes:  
+  spark-master:
+    image: apache/spark:4.1.1
+    container_name: spark-master
+    command: >
+      /bin/bash -c "
+      /opt/spark/sbin/start-master.sh;
+      tail -f /opt/spark/logs/*
+      "
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      cassandra-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+
+  spark-worker:
+    image: apache/spark:4.1.1
+    container_name: spark-worker
+    command: >
+      /bin/bash -c "
+      sleep 5;
+      /opt/spark/sbin/start-worker.sh spark://spark-master:7077;
+      tail -f /opt/spark/logs/*
+      "
+    ports:
+      - "8081:8081"
+    depends_on:
+      spark-master:
+        condition: service_started
+  
+  spark-train-model:
+    build:
+      context: .
+      dockerfile: docker/spark-train-model/Dockerfile.train
+    container_name: spark-train-model
+    depends_on:
+      spark-master:
+        condition: service_started
+      spark-worker:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+      flask-web:
+        condition: service_started
+      
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      TRAINING_DATA_PATH: s3a://raw/simple_flight_delay_features.jsonl.bz2
+      MODEL_OUTPUT_BASE_PATH: s3a://raw/models
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        echo "Waiting for Spark cluster and MinIO..."
+        sleep 15
+
+        /opt/spark/bin/spark-submit \
+          --master spark://spark-master:7077 \
+          --packages org.apache.hadoop:hadoop-aws:3.4.1 \
+          /app/train_spark_mllib_model.py
+  spark-flight-predictor:
+    build:
+      context: .
+      dockerfile: docker/spark-kafka-prediction/Dockerfile.prediction
+    container_name: spark-flight-predictor
+    depends_on:
+      spark-master:
+        condition: service_started
+      spark-worker:
+        condition: service_started
+      kafka:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+      flask-web:
+        condition: service_started
+      spark-train-model:
+        condition: service_completed_successfully
+
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+
+      MODEL_BASE_PATH: s3a://raw/models
+
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REQUEST_TOPIC: flight-delay-ml-request
+      RESPONSE_TOPIC: flight-delay-ml-response
+
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        echo "Waiting for Spark cluster, Kafka and MinIO..."
+        sleep 20
+
+        /opt/spark/bin/spark-submit \
+          --master spark://spark-master:7077 \
+          --class es.upm.dit.ging.predictor.MakePrediction \
+          --packages org.apache.hadoop:hadoop-aws:3.4.1,org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0 \
+          /app/spark-kafka-predictor.jar
+volumes:
   cassandra_data:
   minio_data:

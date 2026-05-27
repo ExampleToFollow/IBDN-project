@@ -1,0 +1,12 @@
+FROM minio/mc:latest AS mc
+
+FROM alpine:3.19
+
+RUN apk add --no-cache wget bash
+
+COPY --from=mc /usr/bin/mc /usr/bin/mc
+
+COPY resources/minio-init/minio-init.sh /init.sh
+RUN chmod +x /init.sh
+
+ENTRYPOINT ["/bin/bash", "/init.sh"]
