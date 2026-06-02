@@ -1,0 +1,7 @@
+FROM python:3.8-slim
+WORKDIR /app
+COPY resources/flask-web/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY resources/flask-web /app/resources/flask-web
+EXPOSE 5001
+CMD ["python", "/app/resources/flask-web/predict_flask_project.py"]

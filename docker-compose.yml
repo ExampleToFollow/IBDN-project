@@ -73,7 +73,7 @@ services:
   cassandra-init:
     build:
       context: .
-      dockerfile: docker/cassandra-init/Dockerfile
+      dockerfile: docker/Dockerfile.cassandra-init
     container_name: cassandra-init
     depends_on:
       cassandra:
@@ -83,7 +83,7 @@ services:
   minio-init:
     build:
       context: .
-      dockerfile: docker/minio-init/Dockerfile
+      dockerfile: docker/Dockerfile.minio-init
     container_name: minio-init
     depends_on:
       minio:
@@ -92,7 +92,7 @@ services:
   flask-web:
     build:
       context: .
-      dockerfile: docker/flask-web/Dockerfile
+      dockerfile: docker/Dockerfile.flask-web
     container_name: flask-web
     ports:
       - "5001:5001"
@@ -101,7 +101,7 @@ services:
       PREDICTION_TOPIC: flight-delay-ml-request
       PROJECT_HOME: /app
     volumes:
-      - ./resources/web:/app/resources/web
+      - ./resources/flask-web:/app/resources/flask-web
     restart: unless-stopped
     depends_on:
       kafka-init:
@@ -148,7 +148,7 @@ services:
   spark-train-model:
     build:
       context: .
-      dockerfile: docker/spark-train-model/Dockerfile.train
+      dockerfile: docker/Dockerfile.spark-pyspark-train-model
     container_name: spark-train-model
     depends_on:
       spark-master:
@@ -179,7 +179,7 @@ services:
   spark-flight-predictor:
     build:
       context: .
-      dockerfile: docker/spark-kafka-prediction/Dockerfile.prediction
+      dockerfile: docker/Dockerfile.spark-scala-prediction
     container_name: spark-flight-predictor
     depends_on:
       spark-master:
