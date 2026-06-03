@@ -1,17 +1,17 @@
-[0m[[0m[0mdebug[0m] [0m[0mPackaging /home/IBDN-project/flight_prediction_new/target/scala-2.13/flight_prediction_2.13-0.1.jar ...[0m
+[0m[[0m[0mdebug[0m] [0m[0mPackaging /home/IBDN-project/resources/spark-scala-prediction/target/scala-2.13/flight_prediction_2.13-0.1.jar ...[0m
 [0m[[0m[0mdebug[0m] [0m[0mInput file mappings:[0m
 [0m[[0m[0mdebug[0m] [0m[0m	es[0m
-[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/flight_prediction_new/target/scala-2.13/classes/es[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/resources/spark-scala-prediction/target/scala-2.13/classes/es[0m
 [0m[[0m[0mdebug[0m] [0m[0m	es/upm[0m
-[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/flight_prediction_new/target/scala-2.13/classes/es/upm[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/resources/spark-scala-prediction/target/scala-2.13/classes/es/upm[0m
 [0m[[0m[0mdebug[0m] [0m[0m	es/upm/dit[0m
-[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/flight_prediction_new/target/scala-2.13/classes/es/upm/dit[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/resources/spark-scala-prediction/target/scala-2.13/classes/es/upm/dit[0m
 [0m[[0m[0mdebug[0m] [0m[0m	es/upm/dit/ging[0m
-[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/flight_prediction_new/target/scala-2.13/classes/es/upm/dit/ging[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/resources/spark-scala-prediction/target/scala-2.13/classes/es/upm/dit/ging[0m
 [0m[[0m[0mdebug[0m] [0m[0m	es/upm/dit/ging/predictor[0m
-[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/flight_prediction_new/target/scala-2.13/classes/es/upm/dit/ging/predictor[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/resources/spark-scala-prediction/target/scala-2.13/classes/es/upm/dit/ging/predictor[0m
 [0m[[0m[0mdebug[0m] [0m[0m	es/upm/dit/ging/predictor/MakePrediction$.class[0m
-[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/flight_prediction_new/target/scala-2.13/classes/es/upm/dit/ging/predictor/MakePrediction$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/resources/spark-scala-prediction/target/scala-2.13/classes/es/upm/dit/ging/predictor/MakePrediction$.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	es/upm/dit/ging/predictor/MakePrediction.class[0m
-[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/flight_prediction_new/target/scala-2.13/classes/es/upm/dit/ging/predictor/MakePrediction.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/IBDN-project/resources/spark-scala-prediction/target/scala-2.13/classes/es/upm/dit/ging/predictor/MakePrediction.class[0m
 [0m[[0m[0mdebug[0m] [0m[0mDone packaging.[0m

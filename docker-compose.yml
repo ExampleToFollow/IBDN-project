@@ -1,4 +1,5 @@
 services:
+  # ── FASE 1: infraestructura base (arrancan en paralelo) ──────────────────
   kafka:
     image: apache/kafka:4.2.0
     container_name: kafka
@@ -32,7 +33,7 @@ services:
     volumes:
       - cassandra_data:/var/lib/cassandra
     healthcheck:
-      test: ["CMD-SHELL", "cqlsh -e 'SHOW VERSION' localhost 9042 || exit 1"]      
+      test: ["CMD-SHELL", "cqlsh -e 'SHOW VERSION' localhost 9042 || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -56,6 +57,26 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── FASE 2: inits + flask-web (cada uno espera solo su dependencia) ───────
+  minio-init:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.minio-init
+    container_name: minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  cassandra-init:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cassandra-init
+    container_name: cassandra-init
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    command: python /app/init.py
+
   kafka-init:
     image: apache/kafka:4.2.0
     container_name: kafka-init
@@ -69,25 +90,6 @@ services:
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic flight-delay-ml-response --partitions 1 --replication-factor 1;
       echo "=== [KAFKA-INIT] Tópicos creados ===";
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list;
-
-  cassandra-init:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.cassandra-init
-    container_name: cassandra-init
-    depends_on:
-      cassandra:
-        condition: service_healthy
-    command: python /app/init.py
-
-  minio-init:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.minio-init
-    container_name: minio-init
-    depends_on:
-      minio:
-        condition: service_healthy
 
   flask-web:
     build:
@@ -111,6 +113,8 @@ services:
       minio-init:
         condition: service_completed_successfully
 
+  # ── FASE 3: cluster Spark (solo infra, sin submits) ───────────────────────
+# ── FASE 3: cluster Spark (solo infra, sin submits) ───────────────────────
   spark-master:
     image: apache/spark:4.1.1
     container_name: spark-master
@@ -123,11 +127,11 @@ services:
       - "8080:8080"
       - "7077:7077"
     depends_on:
-      kafka-init:
+      minio-init:
         condition: service_completed_successfully
       cassandra-init:
         condition: service_completed_successfully
-      minio-init:
+      kafka-init:
         condition: service_completed_successfully
 
   spark-worker:
@@ -144,7 +148,29 @@ services:
     depends_on:
       spark-master:
         condition: service_started
-  
+
+  # ── FASE 3.5: traducción a Iceberg ───────────────────────────────────────
+  iceberg-init:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.spark-pyspark-iceberg
+    container_name: iceberg-init
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      spark-master:
+        condition: service_started
+      spark-worker:
+        condition: service_started
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        /opt/spark/bin/spark-submit \
+          --master spark://spark-master:7077 \
+          --packages org.apache.hadoop:hadoop-aws:3.4.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0 \
+          /app/translate_to_iceberg.py
+
+  # ── FASE 4: entrenamiento ─────────────────────────────────────────────────
   spark-train-model:
     build:
       context: .
@@ -157,9 +183,8 @@ services:
         condition: service_started
       minio-init:
         condition: service_completed_successfully
-      flask-web:
-        condition: service_started
-      
+      iceberg-init:
+        condition: service_completed_successfully
     environment:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: minioadmin
@@ -174,8 +199,9 @@ services:
 
         /opt/spark/bin/spark-submit \
           --master spark://spark-master:7077 \
-          --packages org.apache.hadoop:hadoop-aws:3.4.1 \
+          --packages org.apache.hadoop:hadoop-aws:3.4.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0 \
           /app/train_spark_mllib_model.py
+  # ── FASE 5: predicción ────────────────────────────────────────────────────
   spark-flight-predictor:
     build:
       context: .
@@ -186,26 +212,23 @@ services:
         condition: service_started
       spark-worker:
         condition: service_started
-      kafka:
-        condition: service_started
       minio-init:
+        condition: service_completed_successfully
+      kafka-init:
         condition: service_completed_successfully
       flask-web:
         condition: service_started
       spark-train-model:
         condition: service_completed_successfully
-
     environment:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
-
-      MODEL_BASE_PATH: s3a://raw/models
-
+      SPARK_MASTER: spark://spark-master:7077
+      MODEL_BASE_PATH: s3a://models/production
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       REQUEST_TOPIC: flight-delay-ml-request
       RESPONSE_TOPIC: flight-delay-ml-response
-
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
@@ -215,7 +238,8 @@ services:
           --master spark://spark-master:7077 \
           --class es.upm.dit.ging.predictor.MakePrediction \
           --packages org.apache.hadoop:hadoop-aws:3.4.1,org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0,com.datastax.oss:java-driver-core:4.17.0 \
-          /app/spark-kafka-predictor.jar
+          /app/spark-scala-predictor.jar
+
 volumes:
   cassandra_data:
   minio_data:

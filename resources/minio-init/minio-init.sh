@@ -10,9 +10,10 @@ until mc alias set local http://minio:9000 minioadmin minioadmin > /dev/null 2>&
 done
 
 echo "Creating buckets..."
-mc mb --ignore-existing local/warehouse
-mc mb --ignore-existing local/raw
-mc mb --ignore-existing local/checkpoints
+mc mb --ignore-existing local/raw          # datos crudos — comprimido original
+mc mb --ignore-existing local/flights      # tablas Iceberg por dominio
+mc mb --ignore-existing local/models       # artefactos ML
+mc mb --ignore-existing local/mlflow       # metadatos y artefactos de MLflow
 
 echo "Downloading dataset..."
 wget -q -O /tmp/${DATASET} ${DATASET_URL}

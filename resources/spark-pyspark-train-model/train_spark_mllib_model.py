@@ -1,23 +1,17 @@
-# !/usr/bin/env python
+#!/usr/bin/env python
 
 import sys, os, re
 from os import environ
+from datetime import datetime
 
-# Pass date and base path to main() from airflow
 def main():
-  
+
   APP_NAME = "train_spark_mllib_model.py"
-  
-  # If there is no SparkSession, create the environment
-  try:
-    sc and spark
-  except (NameError, UnboundLocalError) as e:
-    import findspark
-    findspark.init()
-    import pyspark
-    import pyspark.sql
-    
-    spark = (
+
+  import pyspark
+  import pyspark.sql
+
+  spark = (
     pyspark.sql.SparkSession.builder
     .appName(APP_NAME)
     .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000")
@@ -26,135 +20,122 @@ def main():
     .config("spark.hadoop.fs.s3a.path.style.access", "true")
     .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
     .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+    # Iceberg — apunta al bucket flights
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+    .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
+    .config("spark.sql.catalog.local.type", "hadoop")
+    .config("spark.sql.catalog.local.warehouse", "s3a://flights")
     .getOrCreate()
-    )
+  )
 
-    sc = spark.sparkContext
-  
-  #
-  # {
-  #   "ArrDelay":5.0,"CRSArrTime":"2015-12-31T03:20:00.000-08:00","CRSDepTime":"2015-12-31T03:05:00.000-08:00",
-  #   "Carrier":"WN","DayOfMonth":31,"DayOfWeek":4,"DayOfYear":365,"DepDelay":14.0,"Dest":"SAN","Distance":368.0,
-  #   "FlightDate":"2015-12-30T16:00:00.000-08:00","FlightNum":"6109","Origin":"TUS"
-  # }
-  #
+  sc = spark.sparkContext
+
   from pyspark.sql.types import StringType, IntegerType, FloatType, DoubleType, DateType, TimestampType
   from pyspark.sql.types import StructType, StructField
-  from pyspark.sql.functions import udf
-  
-  schema = StructType([
-    StructField("ArrDelay", DoubleType(), True),     # "ArrDelay":5.0
-    StructField("CRSArrTime", TimestampType(), True),    # "CRSArrTime":"2015-12-31T03:20:00.000-08:00"
-    StructField("CRSDepTime", TimestampType(), True),    # "CRSDepTime":"2015-12-31T03:05:00.000-08:00"
-    StructField("Carrier", StringType(), True),     # "Carrier":"WN"
-    StructField("DayOfMonth", IntegerType(), True), # "DayOfMonth":31
-    StructField("DayOfWeek", IntegerType(), True),  # "DayOfWeek":4
-    StructField("DayOfYear", IntegerType(), True),  # "DayOfYear":365
-    StructField("DepDelay", DoubleType(), True),     # "DepDelay":14.0
-    StructField("Dest", StringType(), True),        # "Dest":"SAN"
-    StructField("Distance", DoubleType(), True),     # "Distance":368.0
-    StructField("FlightDate", DateType(), True),    # "FlightDate":"2015-12-30T16:00:00.000-08:00"
-    StructField("FlightNum", StringType(), True),   # "FlightNum":"6109"
-    StructField("Origin", StringType(), True),      # "Origin":"TUS"
-  ])
-  
-  input_path = "s3a://raw/simple_flight_delay_features.jsonl.bz2"
-  features = spark.read.json(input_path, schema=schema)
+  from pyspark.sql.functions import udf, col, count, when, lit, concat
+
+  # ── Rutas ────────────────────────────────────────────────────────────────
+  # Datos — tabla Iceberg en bucket flights
+  INPUT_PATH = "s3a://flights/flight_features/raw"
+
+  # Modelos — bucket models
+  # production/ → lo que usa el predictor en este momento
+  # registry/   → histórico de todos los entrenamientos
+  run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+  PRODUCTION_PATH = "s3a://models/production"
+  REGISTRY_PATH   = "s3a://models/registry/run_{}".format(run_timestamp)
+
+  print("Run timestamp: {}".format(run_timestamp))
+  print("Input path:    {}".format(INPUT_PATH))
+  print("Registry path: {}".format(REGISTRY_PATH))
+  print("Production path: {}".format(PRODUCTION_PATH))
+
+  # ── Lectura desde Iceberg ─────────────────────────────────────────────────
+  features = spark.read.format("iceberg").load(INPUT_PATH)
+
+  features = features.repartition(8)
+  features.cache()
   features.first()
-  
-  #
-  # Check for nulls in features before using Spark ML
-  #
-  null_counts = [(column, features.where(features[column].isNull()).count()) for column in features.columns]
-  cols_with_nulls = filter(lambda x: x[1] > 0, null_counts)
-  print(list(cols_with_nulls))
-  
-  #
-  # Add a Route variable to replace FlightNum
-  #
-  from pyspark.sql.functions import lit, concat
+
+  # ── Null check en un solo job ─────────────────────────────────────────────
+  null_counts = features.select([
+    count(when(col(c).isNull(), c)).alias(c)
+    for c in features.columns
+  ]).collect()
+  print("Null counts: {}".format(null_counts))
+
+  # ── Route feature ─────────────────────────────────────────────────────────
   features_with_route = features.withColumn(
     'Route',
-    concat(
-      features.Origin,
-      lit('-'),
-      features.Dest
-    )
+    concat(features.Origin, lit('-'), features.Dest)
   )
   features_with_route.show(6)
-  
-  #
-  # Use pysmark.ml.feature.Bucketizer to bucketize ArrDelay into on-time, slightly late, very late (0, 1, 2)
-  #
+
+  # ── Bucketizer ────────────────────────────────────────────────────────────
   from pyspark.ml.feature import Bucketizer
-  
-  # Setup the Bucketizer
+
   splits = [-float("inf"), -15.0, 0, 30.0, float("inf")]
   arrival_bucketizer = Bucketizer(
     splits=splits,
     inputCol="ArrDelay",
     outputCol="ArrDelayBucket"
   )
-  
-  # Save the bucketizer
-  arrival_bucketizer_path = "s3a://warehouse/models/arrival_bucketizer_2.0.bin"
-  arrival_bucketizer.write().overwrite().save(arrival_bucketizer_path)
-  
-  # Apply the bucketizer
+
+  # Guardar en registry y en production
+  for base_path in [REGISTRY_PATH, PRODUCTION_PATH]:
+    arrival_bucketizer.write().overwrite().save(
+      "{}/arrival_bucketizer_2.0.bin".format(base_path)
+    )
+
   ml_bucketized_features = arrival_bucketizer.transform(features_with_route)
   ml_bucketized_features.select("ArrDelay", "ArrDelayBucket").show()
-  
-  #
-  # Extract features tools in with pyspark.ml.feature
-  #
+
+  # ── StringIndexers ────────────────────────────────────────────────────────
   from pyspark.ml.feature import StringIndexer, VectorAssembler
-  
-  # Turn category fields into indexes
+
+  ml_bucketized_features.cache()
+
   for column in ["Carrier", "Origin", "Dest", "Route"]:
     string_indexer = StringIndexer(
       inputCol=column,
       outputCol=column + "_index"
     )
-    
+
     string_indexer_model = string_indexer.fit(ml_bucketized_features)
     ml_bucketized_features = string_indexer_model.transform(ml_bucketized_features)
-    
-    # Drop the original column
     ml_bucketized_features = ml_bucketized_features.drop(column)
-    
-    # Save the pipeline model
-    string_indexer_output_path = "s3a://warehouse/models/string_indexer_model_{}.bin".format(
-    column
-    )
-    string_indexer_model.write().overwrite().save(string_indexer_output_path)
-  
-  # Combine continuous, numeric fields with indexes of nominal ones
-  # ...into one feature vector
-  numeric_columns = [
-    "DepDelay", "Distance",
-    "DayOfMonth", "DayOfWeek",
-    "DayOfYear"]
-  index_columns = ["Carrier_index", "Origin_index",
-                   "Dest_index", "Route_index"]
+
+    # Guardar en registry y en production
+    for base_path in [REGISTRY_PATH, PRODUCTION_PATH]:
+      string_indexer_model.write().overwrite().save(
+        "{}/string_indexer_model_{}.bin".format(base_path, column)
+      )
+
+  # ── VectorAssembler ───────────────────────────────────────────────────────
+  numeric_columns = ["DepDelay", "Distance", "DayOfMonth", "DayOfWeek", "DayOfYear"]
+  index_columns   = ["Carrier_index", "Origin_index", "Dest_index", "Route_index"]
+
   vector_assembler = VectorAssembler(
     inputCols=numeric_columns + index_columns,
     outputCol="Features_vec"
   )
   final_vectorized_features = vector_assembler.transform(ml_bucketized_features)
-  
-  # Save the numeric vector assembler
-  vector_assembler_path = "s3a://warehouse/models/numeric_vector_assembler.bin"
-  vector_assembler.write().overwrite().save(vector_assembler_path)
-  
-  # Drop the index columns
+
+  # Guardar en registry y en production
+  for base_path in [REGISTRY_PATH, PRODUCTION_PATH]:
+    vector_assembler.write().overwrite().save(
+      "{}/numeric_vector_assembler.bin".format(base_path)
+    )
+
   for column in index_columns:
     final_vectorized_features = final_vectorized_features.drop(column)
-  
-  # Inspect the finalized features
+
   final_vectorized_features.show()
-  
-  # Instantiate and fit random forest classifier on all the data
+  features.unpersist()
+
+  # ── RandomForest ──────────────────────────────────────────────────────────
   from pyspark.ml.classification import RandomForestClassifier
+
   rfc = RandomForestClassifier(
     featuresCol="Features_vec",
     labelCol="ArrDelayBucket",
@@ -163,14 +144,18 @@ def main():
     maxMemoryInMB=1024
   )
   model = rfc.fit(final_vectorized_features)
-  
-  # Save the new model over the old one
-  model_output_path = "s3a://warehouse/models/spark_random_forest_classifier.flight_delays.5.0.bin"
-  model.write().overwrite().save(model_output_path)
-  
-  # Evaluate model using test data
+
+  # Guardar en registry y en production
+  for base_path in [REGISTRY_PATH, PRODUCTION_PATH]:
+    model.write().overwrite().save(
+      "{}/spark_random_forest_classifier.flight_delays.5.0.bin".format(base_path)
+    )
+
+  ml_bucketized_features.unpersist()
+
+  # ── Evaluación ────────────────────────────────────────────────────────────
   predictions = model.transform(final_vectorized_features)
-  
+
   from pyspark.ml.evaluation import MulticlassClassificationEvaluator
   evaluator = MulticlassClassificationEvaluator(
     predictionCol="Prediction",
@@ -179,11 +164,9 @@ def main():
   )
   accuracy = evaluator.evaluate(predictions)
   print("Accuracy = {}".format(accuracy))
-  
-  # Check the distribution of predictions
+  print("Run {} saved to registry and promoted to production".format(run_timestamp))
+
   predictions.groupBy("Prediction").count().show()
-  
-  # Check a sample
   predictions.sample(False, 0.001, 18).orderBy("CRSDepTime").show(6)
 
 if __name__ == "__main__":
