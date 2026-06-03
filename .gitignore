@@ -1,0 +1,50 @@
+# ── Scala / SBT ──────────────────────────────────────────────────────────────
+resources/spark-scala-prediction/target/
+resources/spark-scala-prediction/project/target/
+resources/spark-scala-prediction/project/project/
+*.class
+*.jar
+
+# ── Python ───────────────────────────────────────────────────────────────────
+resources/flask-web/__pycache__/
+resources/spark-pyspark-iceberg/__pycache__/
+resources/spark-pyspark-train-model/__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# ── Datos grandes ─────────────────────────────────────────────────────────────
+data/*.bz2
+data/*.gz
+data/*.zip
+
+# ── Modelos ───────────────────────────────────────────────────────────────────
+models/*.pkl
+models/*.bin
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+resources/spark-scala-prediction/target/global-logging/
+
+# ── Kubernetes secrets ────────────────────────────────────────────────────────
+k8s/base/secrets.yaml
+
+# ── Variables de entorno ──────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Archivos de sistema ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ── Archivos temporales ───────────────────────────────────────────────────────
+ola.txt
+ola.sh
+ola-2.sh
+*.tmp
