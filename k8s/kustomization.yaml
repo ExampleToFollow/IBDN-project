@@ -31,3 +31,4 @@ resources:
   - spark/spark-predictor.yaml
   # Web
   - app/flask-web.yaml
+  - spark/spark-retrain-cronjob.yaml
