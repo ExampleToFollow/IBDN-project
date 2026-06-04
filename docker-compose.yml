@@ -1,5 +1,5 @@
   services:
-    # ── FASE 1: infraestructura base (secuencial) ────────────────────────────
+    # infraestructura base
     kafka:
       image: apache/kafka:4.2.0
       container_name: kafka
@@ -63,7 +63,7 @@
         timeout: 5s
         retries: 10
 
-    # ── FASE 2: cluster Spark ─────────────────────────────────────────────────
+    # FASE 2: cluster Spark
     spark-master:
       image: apache/spark:4.1.1
       container_name: spark-master
@@ -113,7 +113,7 @@
         spark-master:
           condition: service_started
 
-    # ── FASE 3: inits (paralelo) ──────────────────────────────────────────────
+    # inits 
     minio-init:
       build:
         context: .
@@ -165,7 +165,7 @@
         echo "=== [KAFKA-INIT] Tópicos creados ===";
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list;
 
-    # ── FASE 4: Iceberg ───────────────────────────────────────────────────────
+    # Iceberg 
     iceberg-init:
       build:
         context: .
@@ -186,7 +186,7 @@
             --packages org.apache.hadoop:hadoop-aws:3.4.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0 \
             /app/translate_to_iceberg.py
 
-    # ── FASE 5: MLflow ────────────────────────────────────────────────────────
+    # MLflow 
     mlflow:
       image: ghcr.io/mlflow/mlflow:v2.13.0
       container_name: mlflow
@@ -208,7 +208,7 @@
         minio-init:
           condition: service_completed_successfully
     
-    # ── FASE 6: entrenamiento ─────────────────────────────────────────────────
+    # entrenamiento 
     spark-train-model:
       build:
         context: .
@@ -238,7 +238,7 @@
             --packages org.apache.hadoop:hadoop-aws:3.4.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0 \
             /app/train_spark_mllib_model.py
 
-    # ── FASE 7: predicción ────────────────────────────────────────────────────
+    # predicción 
     spark-flight-predictor:
       build:
         context: .
@@ -270,7 +270,7 @@
             /app/spark-scala-predictor.jar
       restart: unless-stopped
 
-    # ── FASE 8: flask-web ─────────────────────────────────────────────────────
+    #  flask-web 
     flask-web:
       build:
         context: .

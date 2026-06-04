@@ -25,6 +25,7 @@ def main():
     .config("spark.hadoop.fs.s3a.path.style.access", "true")
     .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
     .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+    #ICEBERG!!
     .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
     .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
     .config("spark.sql.catalog.local.type", "hadoop")
@@ -37,7 +38,7 @@ def main():
   from pyspark.sql.types import StringType, IntegerType, FloatType, DoubleType, DateType, TimestampType
   from pyspark.sql.types import StructType, StructField
   from pyspark.sql.functions import udf, col, count, when, lit, concat
-
+  #ICEBERG!!
   INPUT_PATH      = "s3a://flights/flight_features/raw"
   run_timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
   PRODUCTION_PATH = "s3a://models/production"
@@ -54,7 +55,7 @@ def main():
 
   with mlflow.start_run() as run:
     print("MLflow run_id: {}".format(run.info.run_id))
-
+    #ICEBERG!!
     features = spark.read.format("iceberg").load(INPUT_PATH)
     input_rows = features.count()
     print("Input rows: {}".format(input_rows))
@@ -149,7 +150,7 @@ def main():
       maxMemoryInMB=MAX_MEMORY_MB
     )
     model = rfc.fit(final_vectorized_features)
-
+    #ICEBERG!!
     for base_path in [REGISTRY_PATH, PRODUCTION_PATH]:
       model.write().overwrite().save(
         "{}/spark_random_forest_classifier.flight_delays.5.0.bin".format(base_path)
