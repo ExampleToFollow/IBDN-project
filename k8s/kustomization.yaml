@@ -29,3 +29,5 @@ resources:
 
   - spark/spark-train-job.yaml
   - spark/spark-predictor.yaml
+  # Web
+  - app/flask-web.yaml
