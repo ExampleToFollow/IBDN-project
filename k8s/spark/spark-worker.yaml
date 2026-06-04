@@ -15,40 +15,15 @@ spec:
         app: spark-worker
     spec:
       initContainers:
-        - name: wait-for-spark-master
+        - name: wait-for-master
           image: busybox:1.28
-          command:
-            - sh
-            - -c
-            - |
-              until nc -z spark-master 7077; do
-                echo "waiting for spark-master...";
-                sleep 2;
-              done
+          command: ['sh', '-c', "until nc -z spark-master 7077; do echo waiting for spark-master; sleep 2; done"]
       containers:
         - name: spark-worker
-          image: apache/spark:4.1.1-scala2.13-java21-python3-r-ubuntu
+          image: apache/spark:4.1.1
           securityContext:
             runAsUser: 0
-          command:
-            - /opt/spark/bin/spark-class
-            - org.apache.spark.deploy.worker.Worker
-            - spark://spark-master:7077
-          ports:
-            - containerPort: 8081
-              name: ui
+          command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
           env:
             - name: SPARK_MODE
               value: "worker"
-          readinessProbe:
-            tcpSocket:
-              port: 8081
-            initialDelaySeconds: 15
-            periodSeconds: 5
-            failureThreshold: 5
-          livenessProbe:
-            tcpSocket:
-              port: 8081
-            initialDelaySeconds: 20
-            periodSeconds: 15
-            failureThreshold: 3
