@@ -1,9 +1,7 @@
-// Crear conexión WebSocket
 const socket = io();
 
 let currentUUID = null;
 
-// Attach a submit handler to the form
 document.addEventListener("DOMContentLoaded", function () {
   const form = document.getElementById("flight_delay_classification");
 
@@ -13,12 +11,11 @@ document.addEventListener("DOMContentLoaded", function () {
     const url = form.getAttribute("action");
     const formData = new FormData(form);
 
-    // Limpiar resultado anterior
     document.getElementById("result").textContent = "Sending request to Kafka...";
 
     fetch(url, {
       method: "POST",
-      body: new URLSearchParams(formData)  // equivalente a $.post con serialize()
+      body: new URLSearchParams(formData) 
     })
     .then(res => res.json())
     .then(function (response) {
@@ -42,21 +39,18 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 
-// WebSocket connected
 socket.on("connect", function () {
   console.log("WebSocket conectado:", socket.id);
   const status = document.getElementById("status");
   if (status) status.textContent = "Connected";
 });
 
-// WebSocket disconnected
 socket.on("disconnect", function () {
   console.log("WebSocket desconectado");
   const status = document.getElementById("status");
   if (status) status.textContent = "Disconnected";
 });
 
-// Receive Kafka prediction response
 socket.on("kafka_response", function (message) {
   console.log("[WS RESPONSE]", message);
 
@@ -70,7 +64,6 @@ socket.on("kafka_response", function (message) {
   }
 });
 
-// Render the response on the page
 function renderPage(response) {
   console.log(response);
 

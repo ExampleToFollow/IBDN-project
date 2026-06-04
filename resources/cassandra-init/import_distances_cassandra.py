@@ -4,10 +4,8 @@ from cassandra.cluster import Cluster
 
 DATA_URL = "http://s3.amazonaws.com/agile_data_science/origin_dest_distances.jsonl"
 
-print("Descargando datos...")
 response = urllib.request.urlopen(DATA_URL)
 
-print("Conectando a Cassandra...")
 cluster = Cluster(["cassandra"], port=9042)
 session = cluster.connect()
 

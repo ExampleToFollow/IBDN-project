@@ -1,4 +1,3 @@
-# k8s/spark/spark-master.yaml
 apiVersion: v1
 kind: Service
 metadata:

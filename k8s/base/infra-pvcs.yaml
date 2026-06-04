@@ -1,4 +1,3 @@
-# k8s/base/infra-pvcs.yaml
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

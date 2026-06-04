@@ -1,16 +1,12 @@
-# k8s/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 namespace: ibdn
-
 resources:
   # Base
   - base/namespace.yaml
   - base/configmaps.yaml
   - base/secrets.yaml
   - base/infra-pvcs.yaml
-
   # Infraestructura
   - infra/kafka.yaml
   - infra/cassandra.yaml
@@ -21,12 +17,10 @@ resources:
   - init-jobs/kafka-init.yaml
   #- init-jobs/iceberg-init.yaml
   - init-jobs/minio-init.yaml  
-
   # Spark
   - spark/spark-master.yaml
   - spark/spark-worker.yaml
   # Spark submit
-
   - spark/spark-train-job-iceberg.yaml
   - spark/spark-predictor.yaml
   # Web

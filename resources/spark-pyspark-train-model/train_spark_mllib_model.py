@@ -5,8 +5,6 @@ from os import environ
 from datetime import datetime
 import mlflow
 import mlflow.spark
-
-# ── Credenciales MinIO para MLflow ────────────────────────────────────────────
 os.environ["AWS_ACCESS_KEY_ID"]     = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
 os.environ["AWS_SECRET_ACCESS_KEY"] = os.environ.get("MINIO_SECRET_KEY", "minioadmin")
 os.environ["MLFLOW_S3_ENDPOINT_URL"] = os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://minio:9000")
@@ -40,7 +38,6 @@ def main():
   from pyspark.sql.types import StructType, StructField
   from pyspark.sql.functions import udf, col, count, when, lit, concat
 
-  # ── Rutas ──────────────────────────────────────────────────────────────────
   INPUT_PATH      = "s3a://flights/flight_features/raw"
   run_timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
   PRODUCTION_PATH = "s3a://models/production"
@@ -51,7 +48,6 @@ def main():
   print("Registry path:   {}".format(REGISTRY_PATH))
   print("Production path: {}".format(PRODUCTION_PATH))
 
-  # ── MLflow setup ───────────────────────────────────────────────────────────
   MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
   mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
   mlflow.set_experiment("flight_delay_model")
@@ -59,7 +55,6 @@ def main():
   with mlflow.start_run() as run:
     print("MLflow run_id: {}".format(run.info.run_id))
 
-    # ── Lectura desde Iceberg ─────────────────────────────────────────────
     features = spark.read.format("iceberg").load(INPUT_PATH)
     input_rows = features.count()
     print("Input rows: {}".format(input_rows))
@@ -68,21 +63,21 @@ def main():
     features.cache()
     features.first()
 
-    # ── Null check ────────────────────────────────────────────────────────
+    # Null check
     null_counts = features.select([
       count(when(col(c).isNull(), c)).alias(c)
       for c in features.columns
     ]).collect()
     print("Null counts: {}".format(null_counts))
 
-    # ── Route feature ─────────────────────────────────────────────────────
+    #  Route feature
     features_with_route = features.withColumn(
       'Route',
       concat(features.Origin, lit('-'), features.Dest)
     )
     features_with_route.show(6)
 
-    # ── Bucketizer ────────────────────────────────────────────────────────
+    #  Bucketizer 
     from pyspark.ml.feature import Bucketizer
 
     splits = [-float("inf"), -15.0, 0, 30.0, float("inf")]
@@ -100,7 +95,7 @@ def main():
     ml_bucketized_features = arrival_bucketizer.transform(features_with_route)
     ml_bucketized_features.select("ArrDelay", "ArrDelayBucket").show()
 
-    # ── StringIndexers ────────────────────────────────────────────────────
+    #  StringIndexers 
     from pyspark.ml.feature import StringIndexer, VectorAssembler
 
     ml_bucketized_features.cache()
@@ -119,7 +114,7 @@ def main():
           "{}/string_indexer_model_{}.bin".format(base_path, column)
         )
 
-    # ── VectorAssembler ───────────────────────────────────────────────────
+    #  VectorAssembler 
     numeric_columns = ["DepDelay", "Distance", "DayOfMonth", "DayOfWeek", "DayOfYear"]
     index_columns   = ["Carrier_index", "Origin_index", "Dest_index", "Route_index"]
 
@@ -140,7 +135,7 @@ def main():
     final_vectorized_features.show()
     features.unpersist()
 
-    # ── RandomForest ──────────────────────────────────────────────────────
+    #  RandomForest 
     from pyspark.ml.classification import RandomForestClassifier
 
     MAX_BINS        = 4657
@@ -162,7 +157,7 @@ def main():
 
     ml_bucketized_features.unpersist()
 
-    # ── Evaluación ────────────────────────────────────────────────────────
+    #  Evaluación 
     predictions = model.transform(final_vectorized_features)
 
     from pyspark.ml.evaluation import MulticlassClassificationEvaluator
@@ -177,7 +172,7 @@ def main():
     predictions.groupBy("Prediction").count().show()
     predictions.sample(False, 0.001, 18).orderBy("CRSDepTime").show(6)
 
-    # ── Loguear en MLflow ─────────────────────────────────────────────────
+    #  Loguear en MLflow 
     # Métricas
     mlflow.log_metric("accuracy", accuracy)
 

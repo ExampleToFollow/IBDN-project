@@ -19,7 +19,7 @@ def main():
     .config("spark.hadoop.fs.s3a.path.style.access", "true")
     .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
     .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-    # Iceberg — apunta al bucket flights
+    # Iceberg apunta al flights
     .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
     .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
     .config("spark.sql.catalog.local.type", "hadoop")
@@ -51,7 +51,7 @@ def main():
     StructField("Origin",     StringType(),    True),
   ])
 
-  # Lee el comprimido original desde raw — no cambia
+  # Lee el comprimido original desde raw 
   input_path = "s3a://raw/simple_flight_delay_features.jsonl.bz2"
   print("Reading dataset from: {}".format(input_path))
   features = spark.read.json(input_path, schema=schema)
@@ -60,7 +60,7 @@ def main():
   features.printSchema()
   features.show(5)
 
-  # Namespace por dominio — flight_features quedará en s3a://flights/flight_features/
+  #  flight_features quedará en s3a://flights/flight_features/
   spark.sql("CREATE NAMESPACE IF NOT EXISTS local.flight_features")
 
   output_table = "local.flight_features.raw"
@@ -76,7 +76,7 @@ def main():
 
   print("Iceberg table written successfully.")
 
-  # Verificar — ruta física: s3a://flights/flight_features/raw/
+  # Verificar
   verify = spark.read.format("iceberg").load("s3a://flights/flight_features/raw")
   print("Verification row count: {}".format(verify.count()))
   verify.show(5)

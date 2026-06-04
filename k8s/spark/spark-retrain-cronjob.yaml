@@ -1,4 +1,3 @@
-# k8s/spark/spark-retrain-cronjob.yaml
 apiVersion: batch/v1
 kind: CronJob
 metadata:

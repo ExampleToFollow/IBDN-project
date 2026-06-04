@@ -19,10 +19,6 @@ from pyelasticsearch import ElasticSearch
 import config
 import predict_utils
 
-
-# ==============================================================================
-# CONFIGURATION
-# ==============================================================================
 KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
 REQUEST_TOPIC = "flight-delay-ml-request"
 RESPONSE_TOPIC = "flight-delay-ml-response"
@@ -36,10 +32,6 @@ REQUIRED_FIELDS = {
     "Origin": str
 }
 
-
-# ==============================================================================
-# APP INITIALIZATION
-# ==============================================================================
 app = Flask(__name__)
 
 logging.basicConfig(
@@ -59,10 +51,6 @@ client = MongoClient()
 
 producer = None
 
-
-# ==============================================================================
-# KAFKA PRODUCER
-# ==============================================================================
 def get_kafka_producer():
     global producer
 
@@ -79,9 +67,7 @@ def get_kafka_producer():
     return producer
 
 
-# ==============================================================================
-# FLASK ROUTES
-# ==============================================================================
+
 @app.route("/flights/delays/predict_kafka")
 def flight_delays_page_kafka():
     form_config = [
@@ -162,9 +148,6 @@ def classify_flight_delays_realtime():
         }), 500
 
 
-# ==============================================================================
-# WEBSOCKET EVENTS
-# ==============================================================================
 @socketio.on("register")
 def handle_register(data):
     client_uuid = data.get("UUID") if data else None
@@ -179,10 +162,6 @@ def handle_register(data):
     logger.info(f"[SOCKET ID] {request.sid}")
     logger.info(f"[ROOM UUID] {client_uuid}")
 
-
-# ==============================================================================
-# KAFKA CONSUMER: RESPONSE TOPIC -> WEBSOCKET
-# ==============================================================================
 def listen_kafka_response_topic():
     while True:
         try:
@@ -232,13 +211,8 @@ def listen_kafka_response_topic():
             logger.info("[KAFKA CONSUMER] Retrying connection in 5 seconds...")
             time.sleep(5)
 
-
-# ==============================================================================
-# MAIN
-# ==============================================================================
 if __name__ == "__main__":
-    logger.info("=== STARTING FLASK BACKEND ===")
-
+    logger.info("Starting Flask...")
     kafka_thread = threading.Thread(target=listen_kafka_response_topic)
     kafka_thread.daemon = True
     kafka_thread.start()

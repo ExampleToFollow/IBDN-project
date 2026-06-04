@@ -1,4 +1,3 @@
-# k8s/spark/spark-train-job.yaml
 apiVersion: batch/v1
 kind: Job
 metadata:

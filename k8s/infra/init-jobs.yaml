@@ -1,4 +1,3 @@
-# k8s/infra/init-jobs.yaml
 apiVersion: batch/v1
 kind: Job
 metadata:
