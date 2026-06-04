@@ -60,6 +60,15 @@ spec:
               value: "0"
             - name: KAFKA_NUM_PARTITIONS
               value: "1"
+            - name: KAFKA_LOG_DIRS
+              value: "/var/kafka-logs"
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/kafka-logs
+      volumes:
+        - name: kafka-data
+          persistentVolumeClaim:
+            claimName: kafka-pvc
 ---
 apiVersion: v1
 kind: Service
