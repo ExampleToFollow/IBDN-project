@@ -1,9 +1,20 @@
-# k8s/infra/kafka.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+spec:
+  ports:
+    - port: 9092
+      name: plaintext
+    - port: 9093
+      name: controller
+  selector:
+    app: kafka
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kafka
-  namespace: ibdn
 spec:
   replicas: 1
   selector:
@@ -19,22 +30,11 @@ spec:
           image: apache/kafka:4.2.0
           ports:
             - containerPort: 9092
-            - containerPort: 9093
           readinessProbe:
             tcpSocket:
               port: 9092
             initialDelaySeconds: 10
             periodSeconds: 5
-          livenessProbe:
-            exec:
-              command:
-                - sh
-                - -c
-                - /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1
-            initialDelaySeconds: 15
-            periodSeconds: 15
-            timeoutSeconds: 5
-            failureThreshold: 4
           env:
             - name: KAFKA_NODE_ID
               value: "1"
@@ -47,7 +47,7 @@ spec:
             - name: KAFKA_CONTROLLER_LISTENER_NAMES
               value: "CONTROLLER"
             - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
-              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_PLAINTEXT:SASL_PLAINTEXT,SASL_SSL:SASL_SSL"
             - name: KAFKA_CONTROLLER_QUORUM_VOTERS
               value: "1@localhost:9093"
             - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
@@ -60,20 +60,3 @@ spec:
               value: "0"
             - name: KAFKA_NUM_PARTITIONS
               value: "1"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kafka
-  namespace: ibdn
-spec:
-  type: ClusterIP
-  selector:
-    app: kafka
-  ports:
-    - port: 9092
-      name: plaintext
-      targetPort: 9092
-    - port: 9093
-      name: controller
-      targetPort: 9093

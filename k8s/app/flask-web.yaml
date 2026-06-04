@@ -1,3 +1,4 @@
+# k8s/app/flask-web.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,7 +17,14 @@ spec:
       initContainers:
         - name: wait-for-all
           image: busybox:1.28
-          command: ['sh', '-c', "until nc -z kafka 9092 && nc -z cassandra 9042; do echo waiting for dbs; sleep 2; done"]
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z kafka 9092 && nc -z cassandra 9042; do
+                echo "waiting for kafka and cassandra...";
+                sleep 2;
+              done
       containers:
         - name: flask-web
           image: hineill/ibdn-flask-web:latest
@@ -35,8 +43,8 @@ metadata:
   namespace: ibdn
 spec:
   type: LoadBalancer
-  ports:
-    - port: 5001
-      targetPort: 5001
   selector:
     app: flask-web
+  ports:
+    - port: 80
+      targetPort: 5001
