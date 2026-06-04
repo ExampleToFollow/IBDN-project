@@ -43,6 +43,9 @@ spec:
                 --master spark://spark-master:7077 \
                 --conf spark.driver.bindAddress=0.0.0.0 \
                 --conf spark.driver.host=$MY_POD_IP \
+                --total-executor-cores 4 \
+                --conf spark.cores.max=4 \
+                --executor-memory 1g \
                 --packages org.apache.hadoop:hadoop-aws:3.4.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0 \
                 /app/translate_to_iceberg.py
           envFrom:
