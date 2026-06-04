@@ -1,7 +1,9 @@
+# k8s/infra/kafka.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kafka
+  namespace: ibdn
 spec:
   replicas: 1
   selector:
@@ -45,9 +47,9 @@ spec:
             - name: KAFKA_CONTROLLER_LISTENER_NAMES
               value: "CONTROLLER"
             - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
-              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_PLAINTEXT:SASL_PLAINTEXT,SASL_SSL:SASL_SSL"
+              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
             - name: KAFKA_CONTROLLER_QUORUM_VOTERS
-              value: "1@localhost:9093"
+              value: "1@kafka:9093"
             - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
               value: "1"
             - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
@@ -63,11 +65,13 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kafka
+  namespace: ibdn
 spec:
+  type: ClusterIP
+  selector:
+    app: kafka
   ports:
     - port: 9092
       name: plaintext
     - port: 9093
       name: controller
-  selector:
-    app: kafka

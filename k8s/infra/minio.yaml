@@ -1,7 +1,9 @@
+# k8s/infra/minio.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: minio
+  namespace: ibdn
 spec:
   replicas: 1
   selector:
@@ -41,9 +43,15 @@ spec:
             failureThreshold: 3
           env:
             - name: MINIO_ROOT_USER
-              value: "minioadmin"
+              valueFrom:
+                secretKeyRef:
+                  name: ibdn-secrets
+                  key: MINIO_ACCESS_KEY
             - name: MINIO_ROOT_PASSWORD
-              value: "minioadmin"
+              valueFrom:
+                secretKeyRef:
+                  name: ibdn-secrets
+                  key: MINIO_SECRET_KEY
           volumeMounts:
             - name: minio-data
               mountPath: /data
@@ -53,57 +61,29 @@ spec:
             claimName: minio-pvc
 ---
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: Service
 metadata:
-  name: minio-pvc
+  name: minio
+  namespace: ibdn
 spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 10Gi
-  # storageClassName: standard  # descomenta y ajusta según tu cluster
+  type: ClusterIP
+  selector:
+    app: minio
+  ports:
+    - port: 9000
+      name: api
+      targetPort: 9000
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: minio
+  name: minio-console
+  namespace: ibdn
 spec:
   type: LoadBalancer
-  ports:
-    - port: 9000
-      name: api
-    - port: 9001
-      name: console
   selector:
     app: minio
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: minio-init
-spec:
-  template:
-    spec:
-      initContainers:
-        - name: wait-for-minio
-          image: busybox:1.28
-          command:
-            - sh
-            - -c
-            - |
-              until nc -z minio 9000; do
-                echo "waiting for minio...";
-                sleep 2;
-              done
-      containers:
-        - name: minio-init
-          image: hineill/ibdn-minio-init:latest
-          env:
-            - name: MINIO_ROOT_USER
-              value: "minioadmin"
-            - name: MINIO_ROOT_PASSWORD
-              value: "minioadmin"
-            - name: MINIO_ENDPOINT
-              value: "http://minio:9000"
-      restartPolicy: OnFailure
+  ports:
+    - port: 9001
+      name: console
+      targetPort: 9001
