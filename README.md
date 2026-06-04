@@ -42,12 +42,10 @@ Sistema cloud-native para predicción de retrasos de vuelos en tiempo real, cons
 
 ## Despliegue
 
-### 1. Conectar al cluster
+### 1. Conectar al cluster de gcloud 
 
 ```bash
-gcloud container clusters get-credentials ibdn-cluster \
-  --zone europe-southwest1-a \
-  --project <PROJECT_ID>
+gcloud container clusters get-credentials ibdn-cluster --zone <ZONE_ID>  --project <PROJECT_ID>
 ```
 
 ### 2. Desplegar todo
@@ -57,20 +55,3 @@ kubectl apply -k k8s/
 ```
 
 El orden de arranque es gestionado automáticamente por initContainers — no es necesario aplicar los manifiestos en ningún orden específico.
-
-## Imágenes Docker
-
-```
-hineill/ibdn-minio-init:latest
-hineill/ibdn-cassandra-init:latest
-hineill/ibdn-iceberg-init:latest
-hineill/ibdn-spark-train-model:latest
-hineill/ibdn-spark-flight-predictor:latest
-hineill/ibdn-flask-web:latest
-```
-
-Para rebuildar y publicar:
-
-```bash
-bash push-images.sh
-```
