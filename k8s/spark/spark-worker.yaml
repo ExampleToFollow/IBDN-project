@@ -5,7 +5,7 @@ metadata:
   name: spark-worker
   namespace: ibdn
 spec:
-  replicas: 2
+  replicas: 4
   selector:
     matchLabels:
       app: spark-worker
