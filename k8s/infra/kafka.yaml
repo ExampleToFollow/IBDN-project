@@ -14,16 +14,6 @@ spec:
       labels:
         app: kafka
     spec:
-      initContainers:
-        - name: init-kafka-dirs
-          image: busybox:1.28
-          command:
-            - sh
-            - -c
-            - mkdir -p /var/kafka-logs && chown -R 1000:1000 /var/kafka-logs
-          volumeMounts:
-            - name: kafka-data
-              mountPath: /var/kafka-logs
       containers:
         - name: kafka
           image: apache/kafka:4.2.0
@@ -70,15 +60,6 @@ spec:
               value: "0"
             - name: KAFKA_NUM_PARTITIONS
               value: "1"
-            - name: KAFKA_LOG_DIRS
-              value: "/var/kafka-logs"
-          volumeMounts:
-            - name: kafka-data
-              mountPath: /var/kafka-logs
-      volumes:
-        - name: kafka-data
-          persistentVolumeClaim:
-            claimName: kafka-pvc
 ---
 apiVersion: v1
 kind: Service
