@@ -32,12 +32,17 @@ spec:
       containers:
         - name: iceberg-init
           image: hineill/ibdn-iceberg-init:latest
+          securityContext:
+            runAsUser: 0
           command:
-            - /bin/bash
+            - bash
             - -c
             - |
+              MY_POD_IP=$(hostname -i)
               /opt/spark/bin/spark-submit \
                 --master spark://spark-master:7077 \
+                --conf spark.driver.bindAddress=0.0.0.0 \
+                --conf spark.driver.host=$MY_POD_IP \
                 --packages org.apache.hadoop:hadoop-aws:3.4.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0 \
                 /app/translate_to_iceberg.py
           envFrom:
