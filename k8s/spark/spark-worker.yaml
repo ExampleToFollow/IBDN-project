@@ -27,7 +27,7 @@ spec:
               done
       containers:
         - name: spark-worker
-          image: apache/spark:4.1.1
+          image: apache/spark:4.1.1-scala2.13-java21-python3-r-ubuntu
           securityContext:
             runAsUser: 0
           command:

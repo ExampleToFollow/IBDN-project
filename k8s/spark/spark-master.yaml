@@ -1,4 +1,3 @@
-# k8s/spark/spark-master.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -47,26 +46,18 @@ spec:
               done
       containers:
         - name: spark-master
-          image: apache/spark:4.1.1
+          image: apache/spark:4.1.1-scala2.13-java21-python3-r-ubuntu
           securityContext:
             runAsUser: 0
-          command:
-            - /opt/spark/bin/spark-class
-            - org.apache.spark.deploy.master.Master
+          command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
           ports:
             - containerPort: 7077
-              name: master
             - containerPort: 8080
-              name: ui
           env:
             - name: SPARK_MASTER_PORT
               value: "7077"
             - name: SPARK_MASTER_HOST
               value: "spark-master"
-            - name: SPARK_LOCAL_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
           readinessProbe:
             tcpSocket:
               port: 7077
@@ -93,20 +84,6 @@ spec:
     - port: 7077
       targetPort: 7077
       name: master
-    - port: 8080
-      targetPort: 8080
-      name: ui
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: spark-master-ui
-  namespace: ibdn
-spec:
-  type: LoadBalancer
-  selector:
-    app: spark-master
-  ports:
     - port: 8080
       targetPort: 8080
       name: ui
