@@ -25,3 +25,7 @@ resources:
   # Spark
   - spark/spark-master.yaml
   - spark/spark-worker.yaml
+  # Spark submit
+
+  - spark/spark-train-job.yaml
+  - spark/spark-predictor.yaml
