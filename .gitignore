@@ -1,0 +1,19 @@
+#  SBT 
+resources/spark-scala-prediction/target/
+resources/spark-scala-prediction/project/target/
+resources/spark-scala-prediction/project/project/
+*.class
+*.jar
+# Python
+resources/flask-web/__pycache__/
+resources/spark-pyspark-iceberg/__pycache__/
+resources/spark-pyspark-train-model/__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+k8s/base/secrets.yaml
+.env
+.env.*
+!.env.example

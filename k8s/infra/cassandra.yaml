@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cassandra
+  namespace: ibdn
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cassandra
+  template:
+    metadata:
+      labels:
+        app: cassandra
+    spec:
+      containers:
+        - name: cassandra
+          image: cassandra:4.1
+          ports:
+            - containerPort: 9042
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - cqlsh -e 'SHOW VERSION' localhost 9042 || exit 1
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - cqlsh -e 'SHOW VERSION' localhost 9042 || exit 1
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 10
+          env:
+            - name: CASSANDRA_CLUSTER_NAME
+              value: "flight-cluster"
+          volumeMounts:
+            - name: cassandra-data
+              mountPath: /var/lib/cassandra
+      volumes:
+        - name: cassandra-data
+          persistentVolumeClaim:
+            claimName: cassandra-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cassandra
+  namespace: ibdn
+spec:
+  type: ClusterIP
+  selector:
+    app: cassandra
+  ports:
+    - port: 9042
+      name: cql
+      targetPort: 9042

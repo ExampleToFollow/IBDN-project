@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-predictor
+  namespace: ibdn
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-predictor
+  template:
+    metadata:
+      labels:
+        app: spark-predictor
+    spec:
+      initContainers:
+        - name: wait-for-models
+          image: minio/mc:latest
+          command:
+            - sh
+            - -c
+            - |
+              until mc alias set minio http://minio:9000 minioadmin minioadmin && mc ls minio/models/production/spark_random_forest_classifier.flight_delays.5.0.bin/ > /dev/null 2>&1; do
+                echo "waiting for models in production...";
+                sleep 10;
+              done
+              echo "Models ready!"
+        - name: wait-for-services
+          image: busybox:1.28
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z spark-master 7077 && nc -z kafka 9092 && nc -z cassandra 9042 && nc -z minio 9000; do
+                echo "waiting for services...";
+                sleep 5;
+              done
+      containers:
+        - name: spark-predictor
+          image: hineill/ibdn-spark-flight-predictor:latest
+          securityContext:
+            runAsUser: 0
+          envFrom:
+            - configMapRef:
+                name: ibdn-config
+            - secretRef:
+                name: ibdn-secrets
+          command:
+            - bash
+            - -c
+            - |
+              MY_POD_IP=$(hostname -i)
+              echo "Waiting for Spark cluster, Kafka and MinIO..."
+              sleep 20
+              /opt/spark/bin/spark-submit \
+                --master spark://spark-master:7077 \
+                --conf spark.driver.bindAddress=0.0.0.0 \
+                --conf spark.driver.host=$MY_POD_IP \
+                --executor-memory 2g \
+                --driver-memory 1g \
+                --total-executor-cores 2 \
+                --conf spark.cores.max=2 \
+                --executor-memory 2g \
+                --driver-memory 1g \
+                --class es.upm.dit.ging.predictor.MakePrediction \
+                --packages org.apache.hadoop:hadoop-aws:3.4.1,org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0,com.datastax.oss:java-driver-core:4.17.0 \
+                /app/spark-scala-predictor.jar

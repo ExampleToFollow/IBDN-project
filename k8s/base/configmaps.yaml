@@ -1,0 +1,21 @@
+# k8s/base/configmaps.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ibdn-config
+  namespace: ibdn
+data:
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  REQUEST_TOPIC: "flight-delay-ml-request"
+  RESPONSE_TOPIC: "flight-delay-ml-response"
+  MINIO_ENDPOINT: "http://minio:9000"
+  MINIO_ACCESS_KEY: "minioadmin"
+  MINIO_SECRET_KEY: "minioadmin"
+  MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
+  TRAINING_DATA_PATH: "s3a://raw/simple_flight_delay_features.jsonl.bz2"
+  MODEL_OUTPUT_BASE_PATH: "s3a://models"
+  MODEL_BASE_PATH: "s3a://models/production"
+  MLFLOW_TRACKING_URI: "http://mlflow:5000"
+  SPARK_MASTER: "spark://spark-master:7077"
+  PREDICTION_TOPIC: "flight-delay-ml-request"
+  PROJECT_HOME: "/app"

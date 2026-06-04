@@ -1,0 +1,152 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+  namespace: ibdn
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-minio
+          image: busybox:1.28
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z minio 9000; do
+                echo "waiting for minio...";
+                sleep 2;
+              done
+      containers:
+        - name: minio-init
+          image: hineill/ibdn-minio-init:latest
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ibdn-secrets
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ibdn-secrets
+                  key: MINIO_SECRET_KEY
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: ibdn-config
+                  key: MINIO_ENDPOINT
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cassandra-init
+  namespace: ibdn
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-cassandra
+          image: busybox:1.28
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z cassandra 9042; do
+                echo "waiting for cassandra...";
+                sleep 5;
+              done
+      containers:
+        - name: cassandra-init
+          image: hineill/ibdn-cassandra-init:latest
+          env:
+            - name: CASSANDRA_HOST
+              value: "cassandra"
+            - name: CASSANDRA_PORT
+              value: "9042"
+          command: ["python", "/app/init.py"]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-init
+  namespace: ibdn
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox:1.28
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z kafka 9092; do
+                echo "waiting for kafka...";
+                sleep 2;
+              done
+      containers:
+        - name: kafka-init
+          image: apache/kafka:4.2.0
+          command:
+            - bash
+            - -c
+            - |
+              echo "=== [KAFKA-INIT] Creando tópicos ===";
+              /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1 --topic flight-delay-ml-request;
+              /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1 --topic flight-delay-ml-result;
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list;
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: iceberg-init
+  namespace: ibdn
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-minio-init
+          image: busybox:1.28
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z minio 9000; do
+                echo "waiting for minio...";
+                sleep 2;
+              done
+        - name: wait-for-spark
+          image: busybox:1.28
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z spark-master 7077; do
+                echo "waiting for spark-master...";
+                sleep 2;
+              done
+      containers:
+        - name: iceberg-init
+          image: hineill/ibdn-iceberg-init:latest
+          command:
+            - /bin/bash
+            - -c
+            - |
+              /opt/spark/bin/spark-submit \
+                --master spark://spark-master:7077 \
+                --packages org.apache.hadoop:hadoop-aws:3.4.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0 \
+                /app/translate_to_iceberg.py
+          envFrom:
+            - configMapRef:
+                name: ibdn-config
+            - secretRef:
+                name: ibdn-secrets

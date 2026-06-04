@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-init
+  namespace: ibdn
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox:1.28
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z kafka 9092; do
+                echo "waiting for kafka...";
+                sleep 2;
+              done
+      containers:
+        - name: kafka-init
+          image: apache/kafka:4.2.0
+          command:
+            - bash
+            - -c
+            - |
+              echo "=== [KAFKA-INIT] Creando tópicos ===";
+              /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1 --topic flight-delay-ml-request;
+              /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1 --topic flight-delay-ml-response;
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list;
