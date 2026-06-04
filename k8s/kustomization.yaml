@@ -19,7 +19,7 @@ resources:
   # Init jobs
   - init-jobs/cassandra-init.yaml
   - init-jobs/kafka-init.yaml
-  - init-jobs/iceberg-init.yaml
+  #- init-jobs/iceberg-init.yaml
   - init-jobs/minio-init.yaml  
 
   # Spark
@@ -27,7 +27,7 @@ resources:
   - spark/spark-worker.yaml
   # Spark submit
 
-  - spark/spark-train-job.yaml
+  - spark/spark-train-job-iceberg.yaml
   - spark/spark-predictor.yaml
   # Web
   - app/flask-web.yaml

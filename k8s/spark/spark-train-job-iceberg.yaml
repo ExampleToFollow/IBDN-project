@@ -1,0 +1,79 @@
+# k8s/spark/spark-train-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spark-train-job
+  namespace: ibdn
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-minio
+          image: busybox:1.28
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z minio 9000 && nc -z spark-master 7077; do
+                echo "waiting for minio and spark...";
+                sleep 2;
+              done
+        - name: iceberg-init
+          image: hineill/ibdn-iceberg-init:latest
+          securityContext:
+            runAsUser: 0
+          command:
+            - bash
+            - -c
+            - |
+              MY_POD_IP=$(hostname -i)
+              /opt/spark/bin/spark-submit \
+                --master spark://spark-master:7077 \
+                --conf spark.driver.bindAddress=0.0.0.0 \
+                --conf spark.driver.host=$MY_POD_IP \
+                --total-executor-cores 4 \
+                --conf spark.cores.max=4 \
+                --executor-memory 1g \
+                --packages org.apache.hadoop:hadoop-aws:3.4.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0 \
+                /app/translate_to_iceberg.py
+          envFrom:
+            - configMapRef:
+                name: ibdn-config
+            - secretRef:
+                name: ibdn-secrets
+        - name: wait-for-mlflow
+          image: busybox:1.28
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z mlflow 5000; do
+                echo "waiting for mlflow...";
+                sleep 2;
+              done
+      containers:
+        - name: spark-train
+          image: hineill/ibdn-spark-train-model:latest
+          securityContext:
+            runAsUser: 0
+          envFrom:
+            - configMapRef:
+                name: ibdn-config
+            - secretRef:
+                name: ibdn-secrets
+          command:
+            - bash
+            - -c
+            - |
+              MY_POD_IP=$(hostname -i)
+              /opt/spark/bin/spark-submit \
+                --master spark://spark-master:7077 \
+                --conf spark.driver.bindAddress=0.0.0.0 \
+                --conf spark.driver.host=$MY_POD_IP \
+                --total-executor-cores 4 \
+                --conf spark.cores.max=4 \
+                --executor-memory 1g \
+                --packages org.apache.hadoop:hadoop-aws:3.4.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0 \
+                /app/train_spark_mllib_model.py
