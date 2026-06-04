@@ -16,7 +16,11 @@ resources:
   - infra/cassandra.yaml
   - infra/minio.yaml
   - infra/mlflow.yaml
-  - infra/init-jobs.yaml
+  # Init jobs
+  - init-jobs/cassandra-init.yaml
+  - init-jobs/kafka-init.yaml
+  - init-jobs/iceberg-init.yaml
+  - init-jobs/minio-init.yaml  
 
   # Spark
   - spark/spark-master.yaml
