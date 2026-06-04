@@ -61,6 +61,12 @@ spec:
           env:
             - name: SPARK_MASTER_PORT
               value: "7077"
+            - name: SPARK_MASTER_HOST
+              value: "spark-master"
+            - name: SPARK_LOCAL_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
           readinessProbe:
             tcpSocket:
               port: 7077
