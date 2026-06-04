@@ -15,7 +15,19 @@ spec:
         app: spark-predictor
     spec:
       initContainers:
-        - name: wait-for-all
+        - name: wait-for-models
+          image: minio/mc:latest
+          command:
+            - sh
+            - -c
+            - |
+              mc alias set minio http://minio:9000 minioadmin minioadmin
+              until mc ls minio/models/production/spark_random_forest_classifier.flight_delays.5.0.bin/ > /dev/null 2>&1; do
+                echo "waiting for models in production...";
+                sleep 10;
+              done
+              echo "Models ready!"
+        - name: wait-for-services
           image: busybox:1.28
           command:
             - sh
@@ -28,19 +40,24 @@ spec:
       containers:
         - name: spark-predictor
           image: hineill/ibdn-spark-flight-predictor:latest
+          securityContext:
+            runAsUser: 0
           envFrom:
             - configMapRef:
                 name: ibdn-config
             - secretRef:
                 name: ibdn-secrets
           command:
-            - /bin/bash
+            - bash
             - -c
             - |
+              MY_POD_IP=$(hostname -i)
               echo "Waiting for Spark cluster, Kafka and MinIO..."
               sleep 20
               /opt/spark/bin/spark-submit \
                 --master spark://spark-master:7077 \
+                --conf spark.driver.bindAddress=0.0.0.0 \
+                --conf spark.driver.host=$MY_POD_IP \
                 --executor-memory 2g \
                 --driver-memory 1g \
                 --class es.upm.dit.ging.predictor.MakePrediction \
